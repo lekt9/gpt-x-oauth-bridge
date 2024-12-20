@@ -1,169 +1,257 @@
 openapi: 3.1.0
 info:
+  title: X (Twitter) API Bridge
+  description: API for posting tweets, creating threads, and searching tweets via Tweepy
   version: 1.0.0
-  title: X (Twitter) API - Post, Reply, and Authentication
-  license:
-    name: MIT
 servers:
-  - url: https://api.x.com/2
+  - url: https://gpt-x-oauth-bridge.onrender.com
+    description: Production server
 paths:
-  /tweets:
+  /tweet:
     post:
-      summary: Create a new tweet (start of a thread)
+      summary: Create a new tweet
       operationId: createTweet
       tags:
         - tweets
       security:
-        - BearerAuth: []
+        - ApiKeyAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/TweetBody"
+              $ref: '#/components/schemas/TweetRequest'
       responses:
-        "201":
+        '200':
           description: Tweet created successfully
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TweetResponse"
-        default:
-          description: unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-  /tweets/{tweet_id}/reply:
+                $ref: '#/components/schemas/TweetResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /tweet/{tweet_id}/reply:
     post:
-      summary: Reply to a tweet (continue thread)
+      summary: Reply to an existing tweet
       operationId: replyToTweet
       tags:
         - tweets
       security:
-        - BearerAuth: []
+        - ApiKeyAuth: []
       parameters:
         - name: tweet_id
           in: path
           required: true
-          description: The ID of the tweet to reply to
           schema:
             type: string
+          description: ID of the tweet to reply to
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/TweetBody"
+              $ref: '#/components/schemas/TweetRequest'
       responses:
-        "201":
-          description: Reply tweet created successfully
+        '200':
+          description: Reply created successfully
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TweetResponse"
-        default:
-          description: unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-  /oauth2/token:
+                $ref: '#/components/schemas/ReplyResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /thread:
     post:
-      summary: Obtain a Bearer token for authentication
-      operationId: authenticate
+      summary: Create a thread of tweets
+      operationId: createThread
       tags:
-        - authentication
+        - tweets
+      security:
+        - ApiKeyAuth: []
       requestBody:
         required: true
         content:
-          application/x-www-form-urlencoded:
+          application/json:
             schema:
-              type: object
-              properties:
-                grant_type:
-                  type: string
-                  enum:
-                    - client_credentials
-                    - password
-                    - refresh_token
-                client_id:
-                  type: string
-                client_secret:
-                  type: string
-                refresh_token:
-                  type: string
-                  description: Required if using refresh_token grant type
-                username:
-                  type: string
-                  description: Required if using password grant type
-                password:
-                  type: string
-                  description: Required if using password grant type
-              required:
-                - grant_type
-                - client_id
-                - client_secret
+              $ref: '#/components/schemas/ThreadRequest'
       responses:
-        "200":
-          description: Token issued successfully
+        '200':
+          description: Thread created successfully
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TokenResponse"
-        "400":
-          description: Bad request
-        "401":
-          description: Unauthorized
+                $ref: '#/components/schemas/ThreadResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /tweet/{tweet_id}:
+    get:
+      summary: Get a specific tweet
+      operationId: getTweet
+      tags:
+        - tweets
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: tweet_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID of the tweet to retrieve
+      responses:
+        '200':
+          description: Tweet retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TweetResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /tweets/search:
+    get:
+      summary: Search for tweets
+      operationId: searchTweets
+      tags:
+        - tweets
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Search query string
+      responses:
+        '200':
+          description: Search results retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
 components:
   schemas:
-    TweetBody:
+    TweetRequest:
       type: object
       required:
         - text
       properties:
         text:
           type: string
-          description: The text content of the tweet or reply.
+          description: The content of the tweet
+          example: "Hello, World!"
+
+    ThreadRequest:
+      type: object
+      required:
+        - tweets
+      properties:
+        tweets:
+          type: array
+          items:
+            type: string
+          description: Array of tweet texts to create as a thread
+          example: ["First tweet", "Second tweet", "Third tweet"]
+
     TweetResponse:
       type: object
       properties:
-        data:
-          type: object
-          properties:
-            id:
-              type: string
-              description: The ID of the created tweet or reply.
+        id:
+          type: string
+          description: The ID of the created tweet
+        text:
+          type: string
+          description: The content of the tweet
+
+    ReplyResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the reply tweet
+        text:
+          type: string
+          description: The content of the reply
+        in_reply_to:
+          type: string
+          description: The ID of the tweet being replied to
+
+    ThreadResponse:
+      type: object
+      properties:
+        thread:
+          type: array
+          items:
+            $ref: '#/components/schemas/TweetResponse'
+          description: Array of created tweets in the thread
+
+    SearchResponse:
+      type: object
+      properties:
+        tweets:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                description: Tweet ID
+              text:
+                type: string
+                description: Tweet content
+              author_id:
+                type: string
+                description: ID of the tweet author
+
     Error:
       type: object
       required:
-        - code
-        - message
+        - error
       properties:
-        code:
-          type: integer
-          format: int32
-        message:
+        error:
           type: string
-    TokenResponse:
-      type: object
-      properties:
-        access_token:
-          type: string
-          description: The token to be used for API calls
-        token_type:
-          type: string
-          default: Bearer
-        expires_in:
-          type: integer
-          description: The lifetime of the token in seconds
-        refresh_token:
-          type: string
-          description: A token used to obtain a new access token
+          description: Error message
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
   securitySchemes:
-    BearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-security:
-  - BearerAuth: []
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: API Key with format "Bearer your-api-key"
