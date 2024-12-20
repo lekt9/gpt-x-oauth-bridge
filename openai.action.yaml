@@ -1,0 +1,169 @@
+openapi: 3.1.0
+info:
+  version: 1.0.0
+  title: X (Twitter) API - Post, Reply, and Authentication
+  license:
+    name: MIT
+servers:
+  - url: https://api.x.com/2
+paths:
+  /tweets:
+    post:
+      summary: Create a new tweet (start of a thread)
+      operationId: createTweet
+      tags:
+        - tweets
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TweetBody"
+      responses:
+        "201":
+          description: Tweet created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TweetResponse"
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /tweets/{tweet_id}/reply:
+    post:
+      summary: Reply to a tweet (continue thread)
+      operationId: replyToTweet
+      tags:
+        - tweets
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: tweet_id
+          in: path
+          required: true
+          description: The ID of the tweet to reply to
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TweetBody"
+      responses:
+        "201":
+          description: Reply tweet created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TweetResponse"
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /oauth2/token:
+    post:
+      summary: Obtain a Bearer token for authentication
+      operationId: authenticate
+      tags:
+        - authentication
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                grant_type:
+                  type: string
+                  enum:
+                    - client_credentials
+                    - password
+                    - refresh_token
+                client_id:
+                  type: string
+                client_secret:
+                  type: string
+                refresh_token:
+                  type: string
+                  description: Required if using refresh_token grant type
+                username:
+                  type: string
+                  description: Required if using password grant type
+                password:
+                  type: string
+                  description: Required if using password grant type
+              required:
+                - grant_type
+                - client_id
+                - client_secret
+      responses:
+        "200":
+          description: Token issued successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+components:
+  schemas:
+    TweetBody:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          description: The text content of the tweet or reply.
+    TweetResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+              description: The ID of the created tweet or reply.
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+          format: int32
+        message:
+          type: string
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: The token to be used for API calls
+        token_type:
+          type: string
+          default: Bearer
+        expires_in:
+          type: integer
+          description: The lifetime of the token in seconds
+        refresh_token:
+          type: string
+          description: A token used to obtain a new access token
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - BearerAuth: []
