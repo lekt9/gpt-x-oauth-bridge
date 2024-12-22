@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
-import tweepy
+import asyncio
+from twikit import Client
 import os
 from functools import wraps
 from dotenv import load_dotenv
@@ -8,13 +9,19 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Tweepy client configuration
-client = tweepy.Client(
-    consumer_key=os.environ['API_KEY'],
-    consumer_secret=os.environ['API_KEY_SECRET'],
-    access_token=os.environ['ACCESS_TOKEN'],
-    access_token_secret=os.environ['ACCESS_TOKEN_SECRET']
-)
+# Twikit client configuration
+client = Client('en-US')
+
+# Initialize the client and login
+async def initialize_client():
+    await client.login(
+        auth_info_1=os.environ['TWITTER_USERNAME'],
+        auth_info_2=os.environ['TWITTER_EMAIL'],
+        password=os.environ['TWITTER_PASSWORD']
+    )
+
+# Run initialization
+asyncio.run(initialize_client())
 
 def require_auth(f):
     @wraps(f)
@@ -23,7 +30,7 @@ def require_auth(f):
         if not auth or not auth.startswith('Bearer '):
             return jsonify({'error': 'Invalid authorization header'}), 401
         api_key = auth.split(' ')[1]
-        if api_key != os.environ['API_KEY']:
+        if api_key != os.environ.get('LOCAL_API_KEY'):
             return jsonify({'error': 'Invalid API key'}), 401
         return f(*args, **kwargs)
     return decorated
@@ -39,10 +46,10 @@ def create_tweet():
         return jsonify({'error': 'No tweet text provided'}), 400
     
     try:
-        response = client.create_tweet(text=data['text'])
+        response = asyncio.run(client.create_tweet(text=data['text']))
         return jsonify({
-            'id': response.data['id'],
-            'text': response.data['text']
+            'id': response.id,
+            'text': response.text
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -58,13 +65,13 @@ def reply_to_tweet(tweet_id):
         return jsonify({'error': 'No reply text provided'}), 400
     
     try:
-        response = client.create_tweet(
+        response = asyncio.run(client.create_tweet(
             text=data['text'],
-            in_reply_to_tweet_id=tweet_id
-        )
+            reply_to=tweet_id
+        ))
         return jsonify({
-            'id': response.data['id'],
-            'text': response.data['text'],
+            'id': response.id,
+            'text': response.text,
             'in_reply_to': tweet_id
         })
     except Exception as e:
@@ -85,16 +92,16 @@ def create_thread():
     
     try:
         for tweet_text in data['tweets']:
-            response = client.create_tweet(
+            response = asyncio.run(client.create_tweet(
                 text=tweet_text,
-                in_reply_to_tweet_id=previous_tweet_id
-            )
+                reply_to=previous_tweet_id
+            ))
             tweet_data = {
-                'id': response.data['id'],
-                'text': response.data['text']
+                'id': response.id,
+                'text': response.text
             }
             thread.append(tweet_data)
-            previous_tweet_id = response.data['id']
+            previous_tweet_id = response.id
         
         return jsonify({
             'thread': thread
@@ -109,14 +116,18 @@ def get_tweet(tweet_id):
     Get a specific tweet
     """
     try:
-        response = client.get_tweet(tweet_id, expansions=['author_id'])
-        if not response.data:
+        response = asyncio.run(client.get_tweet_by_id(tweet_id))
+        if not response:
             return jsonify({'error': 'Tweet not found'}), 404
         
         return jsonify({
-            'id': response.data.id,
-            'text': response.data.text,
-            'author_id': response.data.author_id
+            'id': response.id,
+            'text': response.text,
+            'author': {
+                'id': response.user.id,
+                'name': response.user.name,
+                'username': response.user.username
+            }
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -132,18 +143,19 @@ def search_tweets():
         return jsonify({'error': 'No search query provided'}), 400
     
     try:
-        response = client.search_recent_tweets(
-            query=query,
-            max_results=10,
-            expansions=['author_id']
-        )
+        tweets_data = asyncio.run(client.search_tweet(query, 'Latest'))
         
         tweets = []
-        for tweet in response.data or []:
+        for tweet in tweets_data:
             tweets.append({
                 'id': tweet.id,
                 'text': tweet.text,
-                'author_id': tweet.author_id
+                'author': {
+                    'id': tweet.user.id,
+                    'name': tweet.user.name,
+                    'username': tweet.user.username
+                },
+                'created_at': tweet.created_at
             })
         
         return jsonify({
